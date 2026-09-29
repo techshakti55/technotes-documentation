@@ -1,6 +1,6 @@
-# TechNotes first live release — exact API contract
+# First-live UI integration contract
 
-**29 Sep 2026 | Backend implementers: Shakti (User/OAuth), Developer 2 (Notes)**  
+**29 Sep 2026 | UI integration view; service-specific contracts control backend behavior.**  
 **Status:** UI integration contract; service behavior must be implemented and tested. Paths are Gateway-visible. OAuth issuer protocol paths stay at the issuer origin.
 
 ## Shared conventions
@@ -11,7 +11,7 @@
 - `Content-Type: application/json`; CORS permits actual browser origin and Authorization/Content-Type/If-Match headers, GET/POST/PATCH/OPTIONS, and exposes ETag/Location. API Gateway must not strip bearer token, ETag or If-Match.
 - Error body: `{"timestamp":"...","status":400,"code":"VALIDATION_FAILED","message":"...","path":"...","traceId":"...","fieldErrors":[]}`. 401 invalid/missing token; 403 insufficient scope/role; 404 unknown/inaccessible; 409 invalid state; 412 stale ETag; 428 missing If-Match; 503 unavailable.
 
-## Page 1 — User/OAuth Service (Shakti)
+## OAuth calls used by React - see [authoritative OAuth contract](oauth.md)
 
 | Method and issuer/Gateway path | Request | Response / UI use |
 |---|---|---|
@@ -24,7 +24,7 @@ Provision the owner account privately. Public signup is not needed today. Token 
 
 **Required integration:** client redirect and Web origin are exact, code+PKCE S256 works, authorization code cannot be replayed, token endpoint CORS works, bad audience/issuer tokens fail in Notes. Do not put password login or private client secret in React.
 
-## Page 2 — Notes Service (Developer 2)
+## Notes calls used by React - see [authoritative Notes contract](notes.md)
 
 **Public endpoints, no bearer required:**
 

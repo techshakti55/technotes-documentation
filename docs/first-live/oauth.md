@@ -38,6 +38,8 @@ Public signup is not part of the first live release. One owner/admin account is 
 | GET | `/oauth2/jwks` | Expose public signing keys for JWT validation |
 | GET | `/api/v1/users/me` | Return authenticated user profile |
 
+The authorization server also serves its browser login form at GET/POST `/login` as part of the framework flow. These are not additional custom business APIs.
+
 ### Out of scope for this release
 
 - Public signup

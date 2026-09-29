@@ -6,7 +6,7 @@ Version: 1.0 | Date: 2026-09-28 | Status: proposed implementation contract, read
 
 Repository: `techshakti55/technotes-notes-service`  
 Suggested destination: `docs/notes-service-spec.md`  
-Companion: [User/OAuth specification](TechNotes_User_OAuth_Service_Spec_v1.md). Keep both original filenames together in the documentation repository for working relative links, or update the link when moving them into separate repositories.
+Companion: [User/OAuth specification](../../oauth/reference/spec-v1.md). Keep both original filenames together in the documentation repository for working relative links, or update the link when moving them into separate repositories.
 
 ## 1. Purpose and service ownership
 

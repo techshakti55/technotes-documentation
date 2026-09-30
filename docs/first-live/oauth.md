@@ -368,8 +368,19 @@ status
 | Status | Meaning |
 |---|---|
 | 401 | Missing/invalid access token |
-| 403 | Required scope/role missing |
-| 404 | User profile not available/inaccessible |
+| 403 | Valid bearer token is missing `profile.read` |
+| 403 | `USER_DEACTIVATED` — authenticated JWT `sub` resolves to a deactivated account |
+| 404 | `USER_NOT_FOUND` — authenticated JWT `sub` does not resolve to a persisted account |
+
+### Frozen first-live account-state behavior
+
+For an already authenticated `/api/v1/users/me` request:
+
+- JWT `sub` with no persisted account returns **404 `USER_NOT_FOUND`**.
+- A persisted but deactivated account returns **403 `USER_DEACTIVATED`**.
+- Login/authentication failures remain generic and must not reveal whether an account is missing, disabled, or the password is wrong.
+- Do not auto-provision an account.
+- Do not add an endpoint for this behavior.
 
 ### UI use
 
@@ -425,6 +436,10 @@ Timestamps are ISO-8601 UTC.
 - Notes Service can validate issued access tokens.
 - `/api/v1/users/me` returns the owner profile for a valid token.
 - `/api/v1/users/me` returns 401 without a valid access token.
+- `/api/v1/users/me` returns 403 `USER_DEACTIVATED` when the authenticated subject resolves to a deactivated account.
+- `/api/v1/users/me` returns 404 `USER_NOT_FOUND` when the authenticated subject has no persisted account.
+- Login/authentication failures do not reveal missing/disabled/wrong-password distinctions.
+- No auto-provisioning is added.
 - No endpoint is added, removed, or renamed for the first live release.
 
 ---

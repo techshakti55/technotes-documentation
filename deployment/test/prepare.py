@@ -25,12 +25,13 @@ repos={'ui':'technotes-ui','oauth':'technotes-user-oauth-service','notes':'techn
 for component,repo in repos.items():
     ref=os.environ.get(component.upper()+'_REF') or refs[component]
     folder=root/'sources'/component
-    if not folder.exists():
+    fresh = not folder.exists()
+    if fresh:
         folder.parent.mkdir(exist_ok=True)
         subprocess.run(['git','clone','--no-checkout','https://github.com/techshakti55/'+repo+'.git',str(folder)],check=True)
     # Never overwrite developers' edits in a test source checkout.
     dirty=subprocess.check_output(['git','-C',str(folder),'status','--porcelain'],text=True)
-    if dirty.strip(): raise SystemExit('Test source has local edits: '+component)
+    if not fresh and dirty.strip(): raise SystemExit('Test source has local edits: '+component)
     subprocess.run(['git','-C',str(folder),'fetch','origin',ref],check=True)
     subprocess.run(['git','-C',str(folder),'checkout','--detach','FETCH_HEAD'],check=True)
     sha=subprocess.check_output(['git','-C',str(folder),'rev-parse','HEAD'],text=True).strip()

@@ -1,0 +1,22 @@
+name: Deployment script verification
+on:
+  pull_request:
+    paths: ['deployment/first-live/scripts/deploy-ui.sh', 'deployment/first-live/scripts/test_deploy_ui.py', '.github/workflows/deployment-config.yml']
+  push:
+    branches: [main, develop]
+    paths: ['deployment/first-live/scripts/deploy-ui.sh', 'deployment/first-live/scripts/test_deploy_ui.py', '.github/workflows/deployment-config.yml']
+permissions:
+  contents: read
+concurrency:
+  group: deployment-config-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: bash -n deployment/first-live/scripts/deploy-ui.sh
+      - run: python3 deployment/first-live/scripts/test_deploy_ui.py

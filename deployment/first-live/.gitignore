@@ -13,3 +13,7 @@ backups/
 *.tar
 *.zip
 *.log
+ui.release.yaml
+.ui-rollback*
+.ui-release*
+.ui-deploy.lock

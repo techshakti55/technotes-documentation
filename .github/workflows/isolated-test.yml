@@ -1,0 +1,86 @@
+name: Isolated first-live integration
+on:
+  pull_request:
+    paths: ['deployment/test/**', '.github/workflows/isolated-test.yml']
+  push:
+    branches: [main, develop]
+    paths: ['deployment/test/**', '.github/workflows/isolated-test.yml']
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      harness_ref:
+        type: string
+        required: true
+      ui_ref:
+        type: string
+        default: ''
+      oauth_ref:
+        type: string
+        default: ''
+      notes_ref:
+        type: string
+        default: ''
+      gateway_ref:
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: isolated-stack-${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout test harness
+        uses: actions/checkout@v4
+        with:
+          repository: techshakti55/technotes-documentation
+          ref: ${{ github.repository == 'techshakti55/technotes-documentation' && github.sha || inputs.harness_ref }}
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare fresh test keys, accounts and source checkouts
+        working-directory: deployment/test
+        env:
+          UI_REF: ${{ inputs.ui_ref }}
+          OAUTH_REF: ${{ inputs.oauth_ref }}
+          NOTES_REF: ${{ inputs.notes_ref }}
+          GATEWAY_REF: ${{ inputs.gateway_ref }}
+        run: python prepare.py
+      - name: Start isolated databases
+        working-directory: deployment/test
+        run: docker compose up -d --wait postgres mongodb
+      - name: Run Java verification gates
+        run: bash deployment/test/verify-java.sh
+      - name: Build and start full test stack
+        working-directory: deployment/test
+        run: |
+          docker compose build
+          docker compose up -d
+          python wait.py
+      - name: Install browser test dependencies
+        working-directory: deployment/test
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Real browser and API integration verification
+        working-directory: deployment/test
+        run: npm test
+      - name: Test runtime status
+        if: always()
+        working-directory: deployment/test
+        run: docker compose ps -a
+      - name: Remove only disposable test resources
+        if: always()
+        working-directory: deployment/test
+        run: docker compose down --volumes --remove-orphans

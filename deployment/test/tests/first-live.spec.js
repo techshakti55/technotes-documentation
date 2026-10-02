@@ -1,0 +1,52 @@
+import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+const base='http://localhost:28080';
+const password=readFileSync(new URL('../.env',import.meta.url),'utf8')
+  .split('\n').find(s=>s.startsWith('TEST_PASSWORD=')).slice('TEST_PASSWORD='.length);
+
+test('real PKCE browser login, ETag workflow and anonymous published reader', async ({page,request,browser}) => {
+  await page.goto('/');
+  await page.getByRole('button',{name:'Admin sign in'}).click();
+  await page.waitForURL('http://localhost:29000/login**');
+  await page.locator('input[name="username"]').fill('test-admin@example.invalid');
+  await page.locator('input[name="password"]').fill(password);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.waitForURL('http://localhost:25173/admin');
+  await expect(page.getByRole('heading',{name:/Welcome back/})).toBeVisible();
+  const token=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('technotes.auth')).access_token);
+  const headers={Authorization:'Bearer '+token};
+  // Assert only status/selected fields; never print the token or complete responses.
+  expect((await request.get(base+'/api/v1/users/me',{headers})).status()).toBe(200);
+  expect((await request.get(base+'/api/v1/notes')).status()).toBe(401);
+  expect((await request.get(base+'/api/v1/notes',{headers:{Authorization:'Bearer invalid'}})).status()).toBe(401);
+  const suffix=Date.now().toString();
+  const category=await request.post(base+'/api/v1/categories',{headers,data:{name:'CI '+suffix,slug:'ci-'+suffix,sortOrder:0}});
+  expect(category.status()).toBe(201);
+  const categoryId=(await category.json()).id;
+  const markdown='# Integration note\n\nFresh test data only.';
+  const draft=await request.post(base+'/api/v1/notes',{headers,data:{title:'CI note '+suffix,summary:'Before edit',contentMarkdown:markdown,primaryCategoryId:categoryId,tags:['ci'],visibility:'PUBLIC'}});
+  expect(draft.status()).toBe(201);
+  const note=await draft.json(); const path=base+'/api/v1/notes/'+note.id;
+  expect(note.status).toBe('DRAFT');
+  const initial=draft.headers()['etag']; expect(initial).toBeTruthy();
+  expect((await request.get(base+'/api/v1/public/notes/'+note.slug)).status()).toBe(404);
+  expect((await request.patch(path,{headers,data:{summary:'Rejected'}})).status()).toBe(428);
+  const edit=await request.patch(path,{headers:{...headers,'If-Match':initial},data:{summary:'After edit'}});
+  expect(edit.status()).toBe(200);
+  expect((await request.patch(path,{headers:{...headers,'If-Match':initial},data:{summary:'Stale'}})).status()).toBe(412);
+  const submit=await request.post(path+'/submit',{headers:{...headers,'If-Match':edit.headers()['etag']}});
+  expect(submit.status()).toBe(200); expect((await submit.json()).status).toBe('IN_REVIEW');
+  const publish=await request.post(path+'/publish',{headers:{...headers,'If-Match':submit.headers()['etag']}});
+  expect(publish.status()).toBe(200); const published=await publish.json(); expect(published.status).toBe('PUBLISHED');
+  const detail=await request.get(base+'/api/v1/public/notes/'+published.slug);
+  expect(detail.status()).toBe(200); expect((await detail.json()).contentMarkdown).toBe(markdown);
+  const listing=await request.get(base+'/api/v1/public/notes');
+  const card=(await listing.json()).items.find(n=>n.id===note.id);
+  expect(card.summary).toBe('After edit'); expect(card).not.toHaveProperty('contentMarkdown');
+  const anonymous=await browser.newContext();
+  const reader=await anonymous.newPage();
+  await reader.goto('http://localhost:25173/notes/'+published.slug);
+  await expect(reader.getByRole('heading',{name:'CI note '+suffix,exact:true})).toBeVisible();
+  await expect(reader.getByText('Fresh test data only.',{exact:true})).toBeVisible();
+  await anonymous.close();
+});

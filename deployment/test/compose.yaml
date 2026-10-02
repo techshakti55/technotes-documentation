@@ -1,0 +1,172 @@
+name: technotes-test
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: technotes_auth_test
+      POSTGRES_USER: technotes_test
+      POSTGRES_PASSWORD: ${TEST_PASSWORD:?Run prepare.py}
+    ports:
+    - 127.0.0.1:25432:5432
+    volumes:
+    - postgres-test:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U technotes_test -d technotes_auth_test
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: &id001
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    restart: 'no'
+    networks:
+    - test
+  mongodb:
+    image: mongo:7.0
+    command:
+    - mongod
+    - --replSet
+    - rs0
+    - --bind_ip_all
+    - --wiredTigerCacheSizeGB
+    - '0.25'
+    ports:
+    - 127.0.0.1:25417:27017
+    volumes:
+    - mongo-test:/data/db
+    healthcheck:
+      test:
+      - CMD
+      - mongosh
+      - --quiet
+      - --eval
+      - quit(db.adminCommand({ping:1}).ok===1?0:1)
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging: *id001
+    restart: 'no'
+    networks:
+    - test
+  mongo-init:
+    image: mongo:7.0
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+    - ./init-mongo.js:/init.js:ro
+    entrypoint:
+    - mongosh
+    - mongodb://mongodb:27017/?directConnection=true
+    - --quiet
+    - /init.js
+    logging: *id001
+    restart: 'no'
+    networks:
+    - test
+  oauth:
+    image: technotes-oauth:test
+    build:
+      context: ./sources/oauth
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/technotes_auth_test
+      DB_USERNAME: technotes_test
+      DB_PASSWORD: ${TEST_PASSWORD:?Run prepare.py}
+      AUTH_ISSUER: http://localhost:29000
+      UI_ORIGIN: http://localhost:25173
+      OAUTH_WEB_REDIRECT_URI: http://localhost:25173/auth/callback
+      OAUTH_KEYSTORE_PATH: /run/keys/oauth.p12
+      OAUTH_KEYSTORE_PASSWORD: ${TEST_PASSWORD:?Run prepare.py}
+      OAUTH_KEY_PASSWORD: ${TEST_PASSWORD:?Run prepare.py}
+      OAUTH_KEY_ALIAS: technotes-test-signing
+      OWNER_EMAIL: test-admin@example.invalid
+      OWNER_DISPLAY_NAME: Test Admin
+      OWNER_PASSWORD: ${TEST_PASSWORD:?Run prepare.py}
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError
+    volumes:
+    - ./secrets/oauth.p12:/run/keys/oauth.p12:ro
+    ports:
+    - 127.0.0.1:29000:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *id001
+    restart: 'no'
+    networks:
+    - test
+    platform: linux/amd64
+  notes:
+    image: technotes-notes:test
+    build:
+      context: ./sources/notes
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/technotes_notes_test?replicaSet=rs0
+      OAUTH_ISSUER_URI: http://localhost:29000
+      OAUTH_JWK_SET_URI: http://oauth:9000/oauth2/jwks
+      EUREKA_CLIENT_ENABLED: 'false'
+      EUREKA_REGISTER_WITH_EUREKA: 'false'
+      EUREKA_FETCH_REGISTRY: 'false'
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError
+    ports:
+    - 127.0.0.1:28081:8081
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      oauth:
+        condition: service_started
+    logging: *id001
+    restart: 'no'
+    networks:
+    - test
+    platform: linux/amd64
+  gateway:
+    image: technotes-gateway:test
+    build:
+      context: ./sources/gateway
+    environment:
+      SERVER_PORT: '8080'
+      NOTES_SERVICE_URL: http://notes:8081
+      USER_OAUTH_SERVICE_URL: http://oauth:9000
+      UI_ORIGIN: http://localhost:25173
+      GATEWAY_CONNECT_TIMEOUT_MS: '5000'
+      GATEWAY_RESPONSE_TIMEOUT: 15s
+      CORS_MAX_AGE_SECONDS: '3600'
+      EUREKA_CLIENT_ENABLED: 'false'
+      EUREKA_URL: http://localhost:8761/eureka/
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError
+    ports:
+    - 127.0.0.1:28080:8080
+    depends_on:
+    - notes
+    - oauth
+    logging: *id001
+    restart: 'no'
+    networks:
+    - test
+    platform: linux/amd64
+  ui:
+    image: technotes-ui:test
+    build:
+      context: ./sources/ui
+      args:
+        VITE_API_BASE_URL: http://localhost:28080
+        VITE_OAUTH_ISSUER: http://localhost:29000
+        VITE_SITE_URL: http://localhost:25173
+    ports:
+    - 127.0.0.1:25173:80
+    depends_on:
+    - gateway
+    logging: *id001
+    restart: 'no'
+    networks:
+    - test
+    platform: linux/amd64
+networks:
+  test: {}
+volumes:
+  postgres-test: {}
+  mongo-test: {}

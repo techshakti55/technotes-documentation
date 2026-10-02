@@ -104,9 +104,15 @@ This is 03:00 IST daily. Use `crontab -e`, preserve existing entries and add thi
 - `20261002T132908Z`: both S3 backups downloaded and byte-compared with local originals; both MATCH.
 - `20261002T142855Z`: backup script manually succeeded, including 14 Notes records, 14 revisions and 2 categories. Checksums uploaded with that run.
 - Daily cron entry verified; first scheduled execution has not yet been observed.
-- Full host reboot recovery, encrypted off-server configuration/key recovery, backup retention/log rotation, failure alerting, immutable image release tags and resource/load limits remain follow-up tasks.
+- Host reboot recovery was verified: services restarted automatically and the user confirmed HTTPS, login and persisted notes.
+- Encrypted off-server configuration/key recovery was verified by decrypt/list and S3 byte comparison for recovery-20261002T154047Z.tar.gz.gpg. The private passphrase is kept separately.
+- Backup retention/log rotation, failure alerting, image promotion/deployment automation and resource/load limits remain follow-up tasks.
 - Existing images use mutable first-live tags. Preserve the known working image bundle privately and take backups before updates. Configuration in Git does not back up image layers or databases.
 
 ## Updating production
 
 Change files through a feature branch and PR, review the diff, take a fresh backup, preserve previous configuration/images, and apply only intended files to the runtime directory. Never replace .env or secrets from this repository. Run quiet Compose validation and verify anonymous reading, admin login and save/submit/publish after an update. This GitHub change by itself does not deploy or restart the server.
+
+## CI and isolated testing
+
+See [isolated test setup](../test/README.md) for GitHub-hosted integration and Windows local commands, and [CI/release workflow](guides/05-CI-Test-and-Release-Workflow.md) for image publishing and the remaining AWS setup. The prepared UI deploy script is not installed or executed on EC2 by merging this repository.

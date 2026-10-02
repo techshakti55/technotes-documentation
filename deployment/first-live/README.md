@@ -3,6 +3,16 @@
 Production runbook and reproducible configuration, recorded 2 October 2026.
 This folder belongs to the documentation repository. The runtime directory on EC2 is `/home/ubuntu/technotes-deployment`; do not run Compose from this nested GitHub folder against the live host without deliberate deployment.
 
+
+## Detailed guides (simple Hinglish)
+
+1. [AWS Deployment Complete Guide](guides/01-AWS-Deployment-Complete-Guide.md) — concepts, decisions, setup commands, issues and fixes.
+2. [Daily Operations Quick Reference](guides/02-Daily-Operations-Quick-Reference.md) — terminal-specific commands and expected results.
+3. [First-Live Status and Handover](guides/03-First-Live-Status-and-Handover.md) — inventory, evidence, context and pending work.
+4. [First-Release Completed Tasks](guides/04-First-Release-Completed-Tasks.md) — service-wise scope, endpoints and completed tasks.
+
+Recorded status is dated 2 October 2026. First scheduled backup and full recovery checks remain pending in this record.
+
 ## Current release
 
 - Site: https://technotes.co.in ; authorization server: https://auth.technotes.co.in .

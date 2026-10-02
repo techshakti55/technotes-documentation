@@ -1,0 +1,157 @@
+name: technotes-production
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: technotes_auth
+      POSTGRES_USER: technotes_auth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U technotes_auth -d technotes_auth"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+    networks: [backend]
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/run/keys/mongo-keyfile", "--wiredTigerCacheSizeGB", "0.25"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongo_admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+    volumes:
+      - mongo-data:/data/db
+      - ./secrets/mongo-keyfile:/run/keys/mongo-keyfile:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'mongosh --quiet --host localhost --username "$$MONGO_INITDB_ROOT_USERNAME" --password "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "quit(db.adminCommand({ping:1}).ok === 1 ? 0 : 1)"']
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    logging: *logging
+    networks: [backend]
+  mongo-init:
+    image: mongo:7.0
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD}
+    volumes:
+      - ./scripts/init-mongo.js:/scripts/init-mongo.js:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - 'exec mongosh "mongodb://mongodb:27017/?directConnection=true" --username mongo_admin --password "$$MONGO_ROOT_PASSWORD" --authenticationDatabase admin --quiet /scripts/init-mongo.js'
+    logging: *logging
+    networks: [backend]
+  oauth:
+    image: technotes-oauth:first-live
+    pull_policy: never
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/technotes_auth
+      DB_USERNAME: technotes_auth
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      AUTH_ISSUER: https://auth.technotes.co.in
+      UI_ORIGIN: https://technotes.co.in
+      OAUTH_WEB_REDIRECT_URI: https://technotes.co.in/auth/callback
+      OAUTH_KEYSTORE_PATH: /run/keys/oauth.p12
+      OAUTH_KEYSTORE_PASSWORD: ${OAUTH_KEYSTORE_PASSWORD:?Set key password}
+      OAUTH_KEY_ALIAS: ${OAUTH_KEY_ALIAS:?Set key alias}
+      OAUTH_KEY_PASSWORD: ${OAUTH_KEY_PASSWORD:?Set key password}
+      OWNER_EMAIL: ${OWNER_EMAIL:?Set OWNER_EMAIL}
+      OWNER_DISPLAY_NAME: ${OWNER_DISPLAY_NAME:?Set OWNER_DISPLAY_NAME}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?Set OWNER_PASSWORD}
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      SERVER_SERVLET_SESSION_COOKIE_SECURE: "true"
+      SERVER_SERVLET_SESSION_COOKIE_HTTP_ONLY: "true"
+      SERVER_SERVLET_SESSION_COOKIE_SAME_SITE: lax
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError"
+    volumes:
+      - ./secrets/oauth.p12:/run/keys/oauth.p12:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *logging
+    networks: [backend]
+  notes:
+    image: technotes-notes:first-live
+    pull_policy: never
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8081"
+      # Generated hex Mongo password requires no URI escaping.
+      MONGODB_URI: mongodb://technotes_notes:${MONGO_APP_PASSWORD:?Set MONGO_APP_PASSWORD}@mongodb:27017/technotes_notes?authSource=technotes_notes&replicaSet=rs0
+      OAUTH_ISSUER_URI: https://auth.technotes.co.in
+      OAUTH_JWK_SET_URI: http://oauth:9000/oauth2/jwks
+      EUREKA_CLIENT_ENABLED: "false"
+      EUREKA_REGISTER_WITH_EUREKA: "false"
+      EUREKA_FETCH_REGISTRY: "false"
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError"
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      oauth:
+        condition: service_started
+    logging: *logging
+    networks: [backend]
+  gateway:
+    image: technotes-gateway:first-live
+    pull_policy: never
+    platform: linux/amd64
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8080"
+      NOTES_SERVICE_URL: http://notes:8081
+      USER_OAUTH_SERVICE_URL: http://oauth:9000
+      UI_ORIGIN: https://technotes.co.in
+      GATEWAY_CONNECT_TIMEOUT_MS: "5000"
+      GATEWAY_RESPONSE_TIMEOUT: 15s
+      CORS_MAX_AGE_SECONDS: "3600"
+      EUREKA_CLIENT_ENABLED: "false"
+      EUREKA_URL: http://localhost:8761/eureka/
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:MaxMetaspaceSize=160m -XX:+ExitOnOutOfMemoryError"
+    depends_on: [notes, oauth]
+    logging: *logging
+    networks: [backend]
+  ui:
+    image: technotes-ui:first-live
+    pull_policy: never
+    platform: linux/amd64
+    restart: unless-stopped
+    logging: *logging
+    networks: [backend]
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [ui, gateway, oauth]
+    logging: *logging
+    networks: [backend]
+networks:
+  backend:
+volumes:
+  postgres-data:
+  mongo-data:
+  caddy-data:
+  caddy-config:

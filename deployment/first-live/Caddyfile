@@ -1,0 +1,13 @@
+technotes.co.in {
+    @api path /api/v1/*
+    handle @api {
+        reverse_proxy gateway:8080
+    }
+    handle {
+        reverse_proxy ui:80
+    }
+}
+
+auth.technotes.co.in {
+    reverse_proxy oauth:9000
+}

@@ -1,0 +1,6 @@
+.env
+secrets/
+sources/
+node_modules/
+test-results/
+playwright-report/

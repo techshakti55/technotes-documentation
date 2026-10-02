@@ -83,8 +83,8 @@ Compose file to AWS, expose these ports, or put real/personal data in it.
 
 Feature PR -> verification + disposable integration -> merge -> versioned image
 publication -> choose image digest -> deploy -> production smoke test.
-Currently UI uses PR -> main because no develop branch existed. Existing backend
-develop/main branches keep their present workflow. Do not merge a failed check.
+All four application repositories now use feature -> develop -> main. UI develop
+was bootstrapped from its verified main; backend branches keep their existing history. Do not merge a failed check.
 Integration is centralized so there is one environment definition to maintain.
 The SHA manifest gives repeatable cross-service combinations; update it through
 a tested PR when adopting a new component baseline.

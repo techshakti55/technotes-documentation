@@ -11,6 +11,8 @@ test('real PKCE browser login, ETag workflow and anonymous published reader', as
   await page.locator('input[name="username"]').fill('test-admin@example.invalid');
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await expect(page.getByRole('button',{name:'My workspace',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'My workspace',exact:true}).click();
   await page.waitForURL('http://localhost:25173/admin');
   await expect(page.getByRole('heading',{name:/Welcome back/})).toBeVisible();
   const token=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('technotes.auth')).access_token);

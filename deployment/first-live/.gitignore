@@ -1,0 +1,15 @@
+# Runtime secrets and data: never commit these.
+.env
+.env.*
+!.env.example
+secrets/
+backups/
+*.p12
+*.pem
+*.key
+*.jks
+*.dump
+*.archive.gz
+*.tar
+*.zip
+*.log

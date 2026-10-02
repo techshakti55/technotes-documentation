@@ -20,8 +20,8 @@ not deploy to EC2. Existing OAuth/Gateway verification workflows remain in place
 1. Create a feature branch from the current integration branch.
 2. Push code and open a PR. View the Actions/checks tab.
 3. Fix failed checks. Never interpret skipped tests as passed.
-4. Merge only after successful verification. For backends, keep develop -> main
-   promotion; UI currently uses feature -> main.
+4. Merge only after successful verification. Keep feature -> develop -> main
+   promotion for all four applications; UI develop was bootstrapped from verified main.
 5. Main's release workflow repeats integration and publishes an image.
 6. Record the image digest and its source SHA. Do not deploy an untested mutable
    `latest` tag. Use the same backend digest for promotion. UI currently has
